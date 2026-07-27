@@ -70,21 +70,34 @@ st.markdown("""
     .summary-date-card {
         background-color: #f8fafc;
         border-left: 4px solid #3b82f6;
-        padding: 12px 16px;
-        margin-bottom: 12px;
-        border-radius: 4px;
+        padding: 14px 18px;
+        margin-bottom: 14px;
+        border-radius: 6px;
     }
     .summary-date-header {
         font-weight: 700;
         font-size: 1.05rem;
         color: #1e293b;
-        margin-bottom: 6px;
+        margin-bottom: 8px;
     }
-    .summary-action-item {
+    .summary-action-title {
+        font-weight: 600;
         font-size: 0.95rem;
-        color: #334155;
-        margin-left: 10px;
+        color: #0f172a;
+        margin-top: 6px;
         margin-bottom: 4px;
+    }
+    .summary-stock-list {
+        list-style-type: disc;
+        margin-left: 20px;
+        margin-top: 2px;
+        margin-bottom: 8px;
+        padding-left: 0;
+    }
+    .summary-stock-item {
+        font-size: 0.9rem;
+        color: #334155;
+        line-height: 1.5;
     }
     .stock-link {
         color: #2563eb !important;
@@ -160,9 +173,9 @@ def get_valid_files():
     return file_list
 
 
-def is_single_action_match(sub_action, target_col):
-    """단일 조치문구와 컬럼 간의 일치 여부 확인"""
-    raw = str(sub_action).replace(" ", "").strip()
+def is_matching_action(raw_action, target_col):
+    """단일 시장조치 문구와 열(Target Column) 간의 정밀 매칭 검사"""
+    raw = str(raw_action).replace(" ", "").strip()
     target = str(target_col).replace(" ", "").strip()
     
     if target in raw or raw in target:
@@ -181,16 +194,8 @@ def is_single_action_match(sub_action, target_col):
     return False
 
 
-def is_matching_action(raw_action, target_col):
-    """' / '로 분리된 복합 조치문구를 분할하여 일치 검사"""
-    sub_actions = [x.strip() for x in str(raw_action).split("/")]
-    for sub in sub_actions:
-        if is_single_action_match(sub, target_col):
-            return True
-    return False
-
-
 def process_scenario_data(df_raw, prefix_filter):
+    """' / '로 구별된 시장조치를 각각 개별 항목으로 분리하여 표 형식 데이터 생성"""
     if df_raw is None or df_raw.empty:
         return pd.DataFrame(columns=BASE_COLS + TARGET_COLS)
 
@@ -210,8 +215,23 @@ def process_scenario_data(df_raw, prefix_filter):
     df_working["종목명"] = df_working["종목명"].fillna("").astype(str).str.strip()
     df_working["시장조치"] = df_working["시장조치"].fillna("").astype(str).str.strip()
 
-    df_master = df_working[["종목코드", "종목명"]].drop_duplicates().set_index("종목코드")
+    # 복합 사유(' / ')를 행별로 분리(explode)
+    exploded_rows = []
+    for _, row in df_working.iterrows():
+        actions = [a.strip() for a in str(row["시장조치"]).split("/") if a.strip()]
+        for act in actions:
+            exploded_rows.append({
+                "날짜": row["날짜"],
+                "종목코드": row["종목코드"],
+                "종목명": row["종목명"],
+                "시장조치": act
+            })
     
+    df_exploded = pd.DataFrame(exploded_rows)
+    if df_exploded.empty:
+        return pd.DataFrame(columns=BASE_COLS + TARGET_COLS)
+
+    df_master = df_exploded[["종목코드", "종목명"]].drop_duplicates().set_index("종목코드")
     if "" in df_master.index:
         df_master = df_master.drop(index="")
         
@@ -220,7 +240,7 @@ def process_scenario_data(df_raw, prefix_filter):
 
     has_data = False
 
-    for idx, row in df_working.iterrows():
+    for idx, row in df_exploded.iterrows():
         raw_action = row["시장조치"]
         if prefix_filter in raw_action:
             for col in TARGET_COLS:
@@ -240,9 +260,9 @@ def process_scenario_data(df_raw, prefix_filter):
 
 
 def display_daily_summary_card(df_raw, scenario_name):
-    """[일자별 시장조치 요약] 목록형 카드 (향후 10거래일 제한 및 네이버 금융 URL 링크 적용)"""
+    """[일자별 시장조치 요약] 목록형 카드 (1줄당 종목 1개 표출 및 복합 사유 분리)"""
     with st.container(border=True):
-        st.markdown(f'<div class="subsection-title">📅 [일자별 시장조치 요약 - 향후 10거래일] ({scenario_name})</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="subsection-title">[일자별 시장조치 요약 - 향후 10거래일] ({scenario_name})</div>', unsafe_allow_html=True)
         
         if df_raw is None or df_raw.empty:
             st.caption("요약할 데이터가 없습니다.")
@@ -260,18 +280,32 @@ def display_daily_summary_card(df_raw, scenario_name):
         df["종목코드"] = df["종목코드"].fillna("").astype(str).str.strip().apply(lambda x: x.split('.')[0] if '.' in x else x).str.zfill(6)
         df["종목명"] = df["종목명"].fillna("").astype(str).str.strip()
         df["시장조치"] = df["시장조치"].fillna("").astype(str).str.strip()
+
+        # 복합 시장조치(' / ') 분리
+        exploded_rows = []
+        for _, row in df.iterrows():
+            actions = [a.strip() for a in str(row["시장조치"]).split("/") if a.strip()]
+            for act in actions:
+                exploded_rows.append({
+                    "날짜": row["날짜"],
+                    "종목코드": row["종목코드"],
+                    "종목명": row["종목명"],
+                    "시장조치": act
+                })
         
-        # 유효한 날짜들을 오름차순으로 추출하여 상위 10거래일(일자) 선택
-        unique_dates = sorted([d for d in df["날짜"].unique() if d])[:10]
-        
+        df_exploded = pd.DataFrame(exploded_rows)
+        if df_exploded.empty:
+            st.caption("표시할 시장조치 요약 내역이 없습니다.")
+            return
+
+        # 유효 날짜 오름차순 추출 후 상위 10거래일 선택
+        unique_dates = sorted([d for d in df_exploded["날짜"].unique() if d])[:10]
         if not unique_dates:
             st.caption("표시할 시장조치 요약 내역이 없습니다.")
             return
 
-        # 선택된 10개 일자에 해당하는 데이터만 필터링
-        df_filtered = df[df["날짜"].isin(unique_dates)]
+        df_filtered = df_exploded[df_exploded["날짜"].isin(unique_dates)]
 
-        # 날짜별로 그룹화하여 목록형 HTML 생성
         html_content = ""
         for date in unique_dates:
             date_df = df_filtered[df_filtered["날짜"] == date]
@@ -279,22 +313,22 @@ def display_daily_summary_card(df_raw, scenario_name):
                 continue
 
             html_content += f'<div class="summary-date-card">'
-            html_content += f'<div class="summary-date-header">🗓️ {date}</div>'
+            html_content += f'<div class="summary-date-header">{date}</div>'
             
-            # 동일 일자 내 시장조치별 그룹화
             action_groups = date_df.groupby("시장조치")
             for action, group in action_groups:
                 if not action:
                     continue
                 
-                # HTML <a> 태그를 사용해 새 창으로 네이버 금융 이동
-                corp_links = [
-                    f'<a href="https://finance.naver.com/item/main.naver?code={row["종목코드"]}" target="_blank" class="stock-link">{row["종목코드"]}</a> ({row["종목명"]})'
-                    for _, row in group.iterrows()
-                ]
-                corps_str = ", ".join(corp_links)
+                html_content += f'<div class="summary-action-title">• <b>{action}</b> ({len(group)}건)</div>'
+                html_content += '<ul class="summary-stock-list">'
                 
-                html_content += f'<div class="summary-action-item">• <b>{action}</b> ({len(group)}건): {corps_str}</div>'
+                # 1줄당 종목 1개씩 세로목록 형태로 표출
+                for _, row in group.iterrows():
+                    stock_link = f'<a href="https://finance.naver.com/item/main.naver?code={row["종목코드"]}" target="_blank" class="stock-link">{row["종목코드"]}</a>'
+                    html_content += f'<li class="summary-stock-item">{stock_link} - {row["종목명"]}</li>'
+                    
+                html_content += '</ul>'
                 
             html_content += '</div>'
 
@@ -420,12 +454,12 @@ def display_scenario_data(df_raw, scenario_name):
 
 # 1. Worst Scenario 영역
 st.markdown('<div class="section-title" style="color: #dc2626;">Worst Scenario 분석</div>', unsafe_allow_html=True)
-display_daily_summary_card(df_worst_raw, "Worst Scenario")  # [일자별 시장조치 요약 - 목록형]
+display_daily_summary_card(df_worst_raw, "Worst Scenario")
 display_scenario_data(df_worst_raw, "Worst Scenario")
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
 # 2. Best Scenario 영역
 st.markdown('<div class="section-title" style="color: #16a34a;">Best Scenario 분석</div>', unsafe_allow_html=True)
-display_daily_summary_card(df_best_raw, "Best Scenario")  # [일자별 시장조치 요약 - 목록형]
+display_daily_summary_card(df_best_raw, "Best Scenario")
 display_scenario_data(df_best_raw, "Best Scenario")
