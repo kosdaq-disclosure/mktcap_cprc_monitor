@@ -69,7 +69,7 @@ st.markdown("""
     /* 일자별 요약 목록 UI 스타일 */
     .summary-date-card {
         background-color: #f8fafc;
-        border-left: 4px solid #3b82f6;
+        border-left: 4px solid #999999;
         padding: 14px 18px;
         margin-bottom: 14px;
         border-radius: 6px;
