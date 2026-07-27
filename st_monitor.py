@@ -84,11 +84,10 @@ st.markdown("""
         font-weight: 600;
         font-size: 0.95rem;
         color: #0f172a;
-        margin-top: 6px;
+        margin-top: 8px;
         margin-bottom: 4px;
     }
     .summary-stock-list {
-        list-style-type: disc;
         margin-left: 20px;
         margin-top: 2px;
         margin-bottom: 8px;
@@ -260,7 +259,7 @@ def process_scenario_data(df_raw, prefix_filter):
 
 
 def display_daily_summary_card(df_raw, scenario_name):
-    """[일자별 시장조치 요약] 목록형 카드 (1줄당 종목 1개 표출 및 복합 사유 분리)"""
+    """[일자별 시장조치 요약] 목록형 카드 (종목명 오름차순 정렬 및 번호 리스트 표출)"""
     with st.container(border=True):
         st.markdown(f'<div class="subsection-title">[일자별 시장조치 요약 - 향후 10거래일] ({scenario_name})</div>', unsafe_allow_html=True)
         
@@ -320,15 +319,18 @@ def display_daily_summary_card(df_raw, scenario_name):
                 if not action:
                     continue
                 
-                html_content += f'<div class="summary-action-title">• <b>{action}</b> ({len(group)}건)</div>'
-                html_content += '<ul class="summary-stock-list">'
+                # 종목명 기준 오름차순 정렬
+                sorted_group = group.sort_values(by="종목명", ascending=True)
                 
-                # 1줄당 종목 1개씩 세로목록 형태로 표출
-                for _, row in group.iterrows():
+                html_content += f'<div class="summary-action-title">[ {action} ] ({len(sorted_group)}건)</div>'
+                html_content += '<ol class="summary-stock-list">'
+                
+                # 번호 형태(<ol>/<li>)로 종목 표출
+                for _, row in sorted_group.iterrows():
                     stock_link = f'<a href="https://finance.naver.com/item/main.naver?code={row["종목코드"]}" target="_blank" class="stock-link">{row["종목코드"]}</a>'
                     html_content += f'<li class="summary-stock-item">{stock_link} - {row["종목명"]}</li>'
                     
-                html_content += '</ul>'
+                html_content += '</ol>'
                 
             html_content += '</div>'
 
