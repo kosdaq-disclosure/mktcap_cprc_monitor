@@ -131,8 +131,9 @@ def get_valid_files():
     return file_list
 
 
-def is_matching_action(raw_action, target_col):
-    raw = str(raw_action).replace(" ", "").strip()
+def is_single_action_match(sub_action, target_col):
+    """단일 조치문구와 컬럼 간의 일치 여부 확인"""
+    raw = str(sub_action).replace(" ", "").strip()
     target = str(target_col).replace(" ", "").strip()
     
     if target in raw or raw in target:
@@ -148,6 +149,15 @@ def is_matching_action(raw_action, target_col):
         if "지정조치" in target and "지정조치" in raw: return True
         if "해제" in target and "해제" in raw: return True
 
+    return False
+
+
+def is_matching_action(raw_action, target_col):
+    """' / '로 분리된 복합 조치문구를 분할하여 일치 검사"""
+    sub_actions = [x.strip() for x in str(raw_action).split("/")]
+    for sub in sub_actions:
+        if is_single_action_match(sub, target_col):
+            return True
     return False
 
 
@@ -198,6 +208,63 @@ def process_scenario_data(df_raw, prefix_filter):
     df_result = df_result.fillna("")
     df_result["종목코드"] = df_result["종목코드"].astype(str).str.zfill(6)
     return df_result[BASE_COLS + TARGET_COLS]
+
+
+def display_daily_summary_card(df_raw, scenario_name):
+    """[일자별 시장조치 요약] 카드 생성 함수"""
+    with st.container(border=True):
+        st.markdown(f'<div class="subsection-title">📅 [일자별 시장조치 요약] ({scenario_name})</div>', unsafe_allow_html=True)
+        
+        if df_raw is None or df_raw.empty:
+            st.caption("요약할 데이터가 없습니다.")
+            return
+
+        df = df_raw.copy()
+        df.columns = [str(c).strip() for c in df.columns]
+        required_cols = ["날짜", "종목코드", "종목명", "시장조치"]
+        
+        if not all(col in df.columns for col in required_cols):
+            st.caption("필수 컬럼이 부족하여 일자별 요약을 표시할 수 없습니다.")
+            return
+
+        df["날짜"] = pd.to_datetime(df["날짜"]).dt.strftime("%Y-%m-%d")
+        df["종목코드"] = df["종목코드"].fillna("").astype(str).str.strip().apply(lambda x: x.split('.')[0] if '.' in x else x).str.zfill(6)
+        df["종목명"] = df["종목명"].fillna("").astype(str).str.strip()
+        df["시장조치"] = df["시장조치"].fillna("").astype(str).str.strip()
+        
+        # 종목코드에 네이버 금융 URL 매핑
+        df["종목코드_URL"] = "https://finance.naver.com/item/main.naver?code=" + df["종목코드"]
+
+        # 날짜 및 시장조치별 그룹화
+        grouped = df.groupby(["날짜", "시장조치"])
+
+        summary_rows = []
+        for (date, action), group in grouped:
+            if not action:
+                continue
+            
+            # 상장법인 목록을 Markdown 링크 형태로 생성 (예: [005930](url)(삼성전자))
+            corp_links = [
+                f"[{row['종목코드']}]({row['종목코드_URL']}) ({row['종목명']})" 
+                for _, row in group.iterrows()
+            ]
+            
+            summary_rows.append({
+                "날짜": date,
+                "시장조치 내역": action,
+                "상장법인 수": len(group),
+                "상장법인 목록 (코드 클릭 시 이동)": ", ".join(corp_links)
+            })
+
+        if summary_rows:
+            df_summary = pd.DataFrame(summary_rows).sort_values(by=["날짜", "시장조치 내역"], ascending=[True, True])
+            st.markdown(
+                df_summary.to_html(escape=False, index=False), 
+                unsafe_allow_html=True
+            )
+            st.markdown("<br>", unsafe_allow_html=True)
+        else:
+            st.caption("표시할 시장조치 요약 내역이 없습니다.")
 
 
 # -----------------------------------------------------------------------------
@@ -273,7 +340,7 @@ def display_scenario_data(df_raw, scenario_name):
                     if df_total.loc[idx, col] == "" and df_stock_idx.loc[code, col] != "":
                         df_total.loc[idx, col] = df_stock_idx.loc[code, col]
                         
-    # 🌟 [링크 변환 핵심 로직] 종목코드 값에 네이버 금융 URL을 결합하여 컬럼 치환
+    # 종목코드 값에 네이버 금융 URL 결합
     def convert_to_link(df):
         if not df.empty:
             df["종목코드"] = df["종목코드"].astype(str).str.zfill(6)
@@ -284,11 +351,11 @@ def display_scenario_data(df_raw, scenario_name):
     df_market_cap = convert_to_link(df_market_cap)
     df_stock_price = convert_to_link(df_stock_price)
 
-    # 🌟 [LinkColumn 구성 설정] 겉보기엔 원래 코드로 보이게 하고 정규식으로 매칭 추출
+    # LinkColumn 구성 (code= 뒤 6자리만 표출)
     link_config = {
         "종목코드": st.column_config.LinkColumn(
             "종목코드",
-            display_text=r"code=(.*)" # URL 파라미터 중 code= 뒤의 6자리 문자열만 꺼내서 화면에 표출
+            display_text=r"code=(.*)"
         )
     }
                         
@@ -319,10 +386,12 @@ def display_scenario_data(df_raw, scenario_name):
 
 # 1. Worst Scenario 영역
 st.markdown('<div class="section-title" style="color: #dc2626;">Worst Scenario 분석</div>', unsafe_allow_html=True)
+display_daily_summary_card(df_worst_raw, "Worst Scenario")  # [일자별 시장조치 요약] 카드 추가
 display_scenario_data(df_worst_raw, "Worst Scenario")
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
 # 2. Best Scenario 영역
 st.markdown('<div class="section-title" style="color: #16a34a;">Best Scenario 분석</div>', unsafe_allow_html=True)
+display_daily_summary_card(df_best_raw, "Best Scenario")  # [일자별 시장조치 요약] 카드 추가
 display_scenario_data(df_best_raw, "Best Scenario")
