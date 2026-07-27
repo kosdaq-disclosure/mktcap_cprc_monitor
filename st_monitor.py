@@ -261,7 +261,7 @@ def process_scenario_data(df_raw, prefix_filter):
 def display_daily_summary_card(df_raw, scenario_name):
     """[일자별 시장조치 요약] 목록형 카드 (종목명 오름차순 정렬 및 번호 리스트 표출)"""
     with st.container(border=True):
-        st.markdown(f'<div class="subsection-title">[일자별 시장조치 요약 - 향후 10거래일] ({scenario_name})</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="subsection-title">일자별 시장조치 요약 (향후 10거래일)</div>', unsafe_allow_html=True)
         
         if df_raw is None or df_raw.empty:
             st.caption("요약할 데이터가 없습니다.")
@@ -322,7 +322,7 @@ def display_daily_summary_card(df_raw, scenario_name):
                 # 종목명 기준 오름차순 정렬
                 sorted_group = group.sort_values(by="종목명", ascending=True)
                 
-                html_content += f'<div class="summary-action-title">[ {action} ] ({len(sorted_group)}건)</div>'
+                html_content += f'<div class="summary-action-title">{action}({len(sorted_group)}건)</div>'
                 html_content += '<ol class="summary-stock-list">'
                 
                 # 번호 형태(<ol>/<li>)로 종목 표출
