@@ -65,6 +65,35 @@ st.markdown("""
         border-radius: 0.5rem !important;
         background-color: #fcfcfc !important;
     }
+
+    /* 일자별 요약 목록 UI 스타일 */
+    .summary-date-card {
+        background-color: #f8fafc;
+        border-left: 4px solid #3b82f6;
+        padding: 12px 16px;
+        margin-bottom: 12px;
+        border-radius: 4px;
+    }
+    .summary-date-header {
+        font-weight: 700;
+        font-size: 1.05rem;
+        color: #1e293b;
+        margin-bottom: 6px;
+    }
+    .summary-action-item {
+        font-size: 0.95rem;
+        color: #334155;
+        margin-left: 10px;
+        margin-bottom: 4px;
+    }
+    .stock-link {
+        color: #2563eb !important;
+        text-decoration: underline !important;
+        font-weight: 600;
+    }
+    .stock-link:hover {
+        color: #1d4ed8 !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -211,9 +240,9 @@ def process_scenario_data(df_raw, prefix_filter):
 
 
 def display_daily_summary_card(df_raw, scenario_name):
-    """[일자별 시장조치 요약] 카드 생성 함수"""
+    """[일자별 시장조치 요약] 목록형 카드 (향후 10거래일 제한 및 네이버 금융 URL 링크 적용)"""
     with st.container(border=True):
-        st.markdown(f'<div class="subsection-title">📅 [일자별 시장조치 요약] ({scenario_name})</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="subsection-title">📅 [일자별 시장조치 요약 - 향후 10거래일] ({scenario_name})</div>', unsafe_allow_html=True)
         
         if df_raw is None or df_raw.empty:
             st.caption("요약할 데이터가 없습니다.")
@@ -232,39 +261,44 @@ def display_daily_summary_card(df_raw, scenario_name):
         df["종목명"] = df["종목명"].fillna("").astype(str).str.strip()
         df["시장조치"] = df["시장조치"].fillna("").astype(str).str.strip()
         
-        # 종목코드에 네이버 금융 URL 매핑
-        df["종목코드_URL"] = "https://finance.naver.com/item/main.naver?code=" + df["종목코드"]
-
-        # 날짜 및 시장조치별 그룹화
-        grouped = df.groupby(["날짜", "시장조치"])
-
-        summary_rows = []
-        for (date, action), group in grouped:
-            if not action:
-                continue
-            
-            # 상장법인 목록을 Markdown 링크 형태로 생성 (예: [005930](url)(삼성전자))
-            corp_links = [
-                f"[{row['종목코드']}]({row['종목코드_URL']}) ({row['종목명']})" 
-                for _, row in group.iterrows()
-            ]
-            
-            summary_rows.append({
-                "날짜": date,
-                "시장조치 내역": action,
-                "상장법인 수": len(group),
-                "상장법인 목록 (코드 클릭 시 이동)": ", ".join(corp_links)
-            })
-
-        if summary_rows:
-            df_summary = pd.DataFrame(summary_rows).sort_values(by=["날짜", "시장조치 내역"], ascending=[True, True])
-            st.markdown(
-                df_summary.to_html(escape=False, index=False), 
-                unsafe_allow_html=True
-            )
-            st.markdown("<br>", unsafe_allow_html=True)
-        else:
+        # 유효한 날짜들을 오름차순으로 추출하여 상위 10거래일(일자) 선택
+        unique_dates = sorted([d for d in df["날짜"].unique() if d])[:10]
+        
+        if not unique_dates:
             st.caption("표시할 시장조치 요약 내역이 없습니다.")
+            return
+
+        # 선택된 10개 일자에 해당하는 데이터만 필터링
+        df_filtered = df[df["날짜"].isin(unique_dates)]
+
+        # 날짜별로 그룹화하여 목록형 HTML 생성
+        html_content = ""
+        for date in unique_dates:
+            date_df = df_filtered[df_filtered["날짜"] == date]
+            if date_df.empty:
+                continue
+
+            html_content += f'<div class="summary-date-card">'
+            html_content += f'<div class="summary-date-header">🗓️ {date}</div>'
+            
+            # 동일 일자 내 시장조치별 그룹화
+            action_groups = date_df.groupby("시장조치")
+            for action, group in action_groups:
+                if not action:
+                    continue
+                
+                # HTML <a> 태그를 사용해 새 창으로 네이버 금융 이동
+                corp_links = [
+                    f'<a href="https://finance.naver.com/item/main.naver?code={row["종목코드"]}" target="_blank" class="stock-link">{row["종목코드"]}</a> ({row["종목명"]})'
+                    for _, row in group.iterrows()
+                ]
+                corps_str = ", ".join(corp_links)
+                
+                html_content += f'<div class="summary-action-item">• <b>{action}</b> ({len(group)}건): {corps_str}</div>'
+                
+            html_content += '</div>'
+
+        st.markdown(html_content, unsafe_allow_html=True)
 
 
 # -----------------------------------------------------------------------------
@@ -386,12 +420,12 @@ def display_scenario_data(df_raw, scenario_name):
 
 # 1. Worst Scenario 영역
 st.markdown('<div class="section-title" style="color: #dc2626;">Worst Scenario 분석</div>', unsafe_allow_html=True)
-display_daily_summary_card(df_worst_raw, "Worst Scenario")  # [일자별 시장조치 요약] 카드 추가
+display_daily_summary_card(df_worst_raw, "Worst Scenario")  # [일자별 시장조치 요약 - 목록형]
 display_scenario_data(df_worst_raw, "Worst Scenario")
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
 # 2. Best Scenario 영역
 st.markdown('<div class="section-title" style="color: #16a34a;">Best Scenario 분석</div>', unsafe_allow_html=True)
-display_daily_summary_card(df_best_raw, "Best Scenario")  # [일자별 시장조치 요약] 카드 추가
+display_daily_summary_card(df_best_raw, "Best Scenario")  # [일자별 시장조치 요약 - 목록형]
 display_scenario_data(df_best_raw, "Best Scenario")
