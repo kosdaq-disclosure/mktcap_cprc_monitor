@@ -151,7 +151,7 @@ def get_valid_files():
             market_type = match.group(4)    # Group 4: kospi, kosdaq 등 (없으면 None)
             
             full_mod_datetime = f"{mod_date}_{mod_time}"
-            market_label = market_type.upper() if market_type else "통합"
+            market_label = market_type.upper() if market_type else ""
             
             valid_files.append({
                 "filename": file, 
@@ -172,7 +172,7 @@ def get_valid_files():
     file_list = [
         (
             row["filename"],
-            f"[{row['market_type']}] 기준일: {row['base_date'][:4]}-{row['base_date'][4:6]}-{row['base_date'][6:]} (수정: {row['display_mod']})",
+            f"{row['market_type']} / 기준일: {row['base_date'][:4]}-{row['base_date'][4:6]}-{row['base_date'][6:]} (수정: {row['display_mod']})",
             row["base_date"],
             row["market_type"]
         )
