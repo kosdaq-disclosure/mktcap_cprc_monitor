@@ -172,7 +172,7 @@ def get_valid_files():
     file_list = [
         (
             row["filename"],
-            f"{row['market_type']} / 기준일: {row['base_date'][:4]}-{row['base_date'][4:6]}-{row['base_date'][6:]} (수정: {row['display_mod']})",
+            f"{row['market_type']} 기준일: {row['base_date'][:4]}-{row['base_date'][4:6]}-{row['base_date'][6:]} (수정: {row['display_mod']})",
             row["base_date"],
             row["market_type"]
         )
