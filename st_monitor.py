@@ -113,7 +113,10 @@ st.markdown("""
 # 1. 환경 설정 및 상수 정의
 # -----------------------------------------------------------------------------
 ANALYSIS_DIR = "analysis"
-FILE_PATTERN = re.compile(r"^result_(\d{8})_(\d{4}-\d{2}-\d{2})_(\d{6})\.xlsx$")
+# 요청하신 정규표현식 패턴 적용
+FILE_PATTERN = re.compile(
+    r"^result_(\d{8})_(\d{4}-\d{2}-\d{2})_(\d{6})(?:_([a-zA-Z0-9]+))?\.xlsx$"
+)
 
 BASE_COLS = ["종목코드", "종목명"]
 TARGET_COLS = [
@@ -142,14 +145,18 @@ def get_valid_files():
     for file in files:
         match = FILE_PATTERN.match(file)
         if match:
-            base_date = match.group(1)
-            mod_date = match.group(2)
-            mod_time = match.group(3)
+            base_date = match.group(1)      # Group 1: 8자리 기준일 (예: 20260101)
+            mod_date = match.group(2)       # Group 2: 수정 날짜 (예: 2026-01-01)
+            mod_time = match.group(3)       # Group 3: 수정 시각 (예: 120000)
+            market_type = match.group(4)    # Group 4: kospi, kosdaq 등 (없으면 None)
+            
             full_mod_datetime = f"{mod_date}_{mod_time}"
+            market_label = market_type.upper() if market_type else "통합"
             
             valid_files.append({
                 "filename": file, 
                 "base_date": base_date, 
+                "market_type": market_label,
                 "mod_datetime": full_mod_datetime,
                 "display_mod": f"{mod_date} {mod_time[:2]}:{mod_time[2:4]}:{mod_time[4:]}"
             })
@@ -158,14 +165,16 @@ def get_valid_files():
         return []
 
     df_files = pd.DataFrame(valid_files)
-    df_files = df_files.sort_values(by=["base_date", "mod_datetime"], ascending=[False, False])
-    df_unique = df_files.drop_duplicates(subset=["base_date"], keep="first")
+    df_files = df_files.sort_values(by=["base_date", "market_type", "mod_datetime"], ascending=[False, True, False])
+    # 같은 기준일(base_date)과 시장구분(market_type) 중 최신 수정본만 유지
+    df_unique = df_files.drop_duplicates(subset=["base_date", "market_type"], keep="first")
 
     file_list = [
         (
             row["filename"],
-            f"기준일: {row['base_date'][:4]}-{row['base_date'][4:6]}-{row['base_date'][6:]} (수정: {row['display_mod']})",
-            row["base_date"]
+            f"[{row['market_type']}] 기준일: {row['base_date'][:4]}-{row['base_date'][4:6]}-{row['base_date'][6:]} (수정: {row['display_mod']})",
+            row["base_date"],
+            row["market_type"]
         )
         for _, row in df_unique.iterrows()
     ]
@@ -354,16 +363,16 @@ with st.container(border=True):
             st.success(f"파일 업로드 완료: {filename}")
             st.rerun()
         else:
-            st.error("파일명 규칙이 맞지 않습니다. (형식: result_기준날짜_수정날짜_수정시각.xlsx)")
+            st.error("파일명 규칙이 맞지 않습니다. (예: result_20260101_2026-01-01_120000.xlsx 또는 result_20260101_2026-01-01_120000_kospi.xlsx)")
 
     available_files = get_valid_files()
     if not available_files:
         st.info("analysis 폴더에 조건에 맞는 파일이 없거나 업로드된 파일이 없습니다.")
         st.stop()
 
-    file_options = {display: (name, base_date) for name, display, base_date in available_files}
+    file_options = {display: (name, base_date, market_type) for name, display, base_date, market_type in available_files}
     selected_display = st.selectbox("분석 데이터 선택", options=list(file_options.keys()))
-    selected_filename, selected_base_date = file_options[selected_display]
+    selected_filename, selected_base_date, selected_market_type = file_options[selected_display]
 
 
 # -----------------------------------------------------------------------------
@@ -381,7 +390,7 @@ except Exception as e:
 # -----------------------------------------------------------------------------
 # 5. 메인 화면 - 데이터 시각화 및 네이버 금융 링크 연동
 # -----------------------------------------------------------------------------
-st.markdown(f'<div class="section-title" style="color: #27272a;">기준일 : {selected_base_date}</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="section-title" style="color: #27272a;">기준일 : {selected_base_date} ({selected_market_type})</div>', unsafe_allow_html=True)
 
 
 def display_scenario_data(df_raw, scenario_name):
