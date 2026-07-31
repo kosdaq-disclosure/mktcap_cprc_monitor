@@ -390,8 +390,8 @@ except Exception as e:
 # -----------------------------------------------------------------------------
 # 5. 메인 화면 - 데이터 시각화 및 네이버 금융 링크 연동
 # -----------------------------------------------------------------------------
-st.markdown(f'<div class="section-title" style="color: #27272a;">기준일 : {selected_base_date} {selected_market_type}</div>
-              <div style="color: #27272a;">- 코스닥 : (~25.) 40억원 (26.H1) 150억원 (26.H2) 200억원 (27.~) 300억원</div>
+st.markdown(f'<div class="section-title" style="color: #27272a;">기준일 : {selected_base_date} {selected_market_type}</div> \
+              <div style="color: #27272a;">- 코스닥 : (~25.) 40억원 (26.H1) 150억원 (26.H2) 200억원 (27.~) 300억원</div> \
               <div style="color: #27272a;">- 코스피 : (~25.) 50억원 (26.H1) 200억원 (26.H2) 300억원 (27.~) 500억원</div>', unsafe_allow_html=True)
 
 
